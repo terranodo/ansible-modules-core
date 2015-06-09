@@ -54,6 +54,13 @@ options:
     required: false
     default: null
     aliases: []
+  storage_type:
+    description:
+      - Type of volume; standard (magnetic), gp2 (SSD), io1 (Provisioned IOPS).
+    required: false
+    default: standard
+    aliases: []
+    version_added: "Terranodo"
   instance_type:
     description:
       - The instance type of the database.  Must be specified when command=create. Optional when command=replicate, command=modify or command=restore. If not specified then the replica inherits the same instance type as the source instance. 
@@ -102,7 +109,7 @@ options:
     required: false
     default: null
     aliases: []
-    choices:  [ 'license-included', 'bring-your-own-license', 'general-public-license' ]
+    choices:  [ 'license-included', 'bring-your-own-license', 'general-public-license', 'postgresql-license' ]
   multi_zone:
     description:
       - Specifies if this is a Multi-availability-zone deployment. Can not be used in conjunction with zone parameter. Used only when command=create or command=modify.
@@ -546,6 +553,7 @@ class RDS2DBInstance:
             'instance_type': self.instance['DBInstanceClass'],
             'username': self.instance['MasterUsername'],
             'iops': self.instance['Iops'],
+            'storage_type': self.instance['StorageType'],
             'replication_source': self.instance['ReadReplicaSourceDBInstanceIdentifier']
         }
         if self.instance["VpcSecurityGroups"] is not None:
@@ -630,7 +638,7 @@ def create_db_instance(module, conn):
     required_vars = ['instance_name', 'db_engine', 'size', 'instance_type', 'username', 'password']
     valid_vars = ['backup_retention', 'backup_window',
                   'character_set_name', 'db_name', 'engine_version',
-                  'instance_type', 'iops', 'license_model', 'maint_window',
+                  'instance_type', 'iops', 'storage_type', 'license_model', 'maint_window',
                   'multi_zone', 'option_group', 'parameter_group','port',
                   'subnet', 'upgrade', 'zone']
     if module.params.get('subnet'):
@@ -708,7 +716,7 @@ def delete_db_instance_or_snapshot(module, conn):
         if instance_name:
             if snapshot:
                 params["skip_final_snapshot"] = False
-                params["final_snapshot_id"] = snapshot
+                params["final_db_snapshot_identifier"] = snapshot
             else:
                 params["skip_final_snapshot"] = True
             result = conn.delete_db_instance(instance_name, **params)
@@ -757,7 +765,7 @@ def facts_db_instance_or_snapshot(module, conn):
 def modify_db_instance(module, conn):
     required_vars = ['instance_name']
     valid_vars = ['apply_immediately', 'backup_retention', 'backup_window',
-                  'db_name', 'engine_version', 'instance_type', 'iops', 'license_model',
+                  'db_name', 'engine_version', 'instance_type', 'iops', 'storage_type', 'license_model',
                   'maint_window', 'multi_zone', 'new_instance_name',
                   'option_group', 'parameter_group', 'password', 'size', 'upgrade']
 
@@ -839,7 +847,7 @@ def snapshot_db_instance(module, conn):
 
 def restore_db_instance(module, conn):
     required_vars = ['instance_name', 'snapshot']
-    valid_vars = ['db_name', 'iops', 'license_model', 'multi_zone',
+    valid_vars = ['db_name', 'iops', 'storage_type', 'license_model', 'multi_zone',
                   'option_group', 'port', 'publicly_accessible',
                   'subnet', 'tags', 'upgrade', 'zone']
     if has_rds2:
@@ -889,6 +897,7 @@ def validate_parameters(required_vars, valid_vars, module):
             'license_model': 'license_model',
             'option_group': 'option_group_name',
             'iops': 'iops',
+            'storage_type': 'storage_type',
             'new_instance_name': 'new_instance_id',
             'apply_immediately': 'apply_immediately',
     }
@@ -961,9 +970,10 @@ def main():
             db_name           = dict(required=False),
             engine_version    = dict(required=False),
             parameter_group   = dict(required=False),
-            license_model     = dict(choices=['license-included', 'bring-your-own-license', 'general-public-license'], required=False),
+            license_model     = dict(choices=['license-included', 'bring-your-own-license', 'general-public-license', 'postgresql-license'], required=False),
             multi_zone        = dict(type='bool', default=False),
             iops              = dict(required=False), 
+            storage_type      = dict(choices=['magnetic', 'gp2', 'io1'], required=False), 
             security_groups   = dict(required=False),
             vpc_security_groups = dict(type='list', required=False),
             port              = dict(required=False),
